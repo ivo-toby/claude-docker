@@ -1,0 +1,82 @@
+# GOSS Runtime Tests for Claude Docker Wrapper
+# Validates container runtime configuration and binaries
+# Run with: dgoss run claudedocker:local
+
+# Test that Claude Code binary is installed and accessible
+command:
+  claude --version:
+    exit-status: 0
+    stdout:
+      - "@anthropic-ai/claude-code"
+    timeout: 10000
+
+# Test that su-exec is installed
+file:
+  /usr/local/bin/su-exec:
+    exists: true
+    mode: "0755"
+    filetype: file
+
+# Test that entrypoint script exists and is executable
+  /usr/local/bin/entrypoint.sh:
+    exists: true
+    mode: "0755"
+    filetype: file
+
+# Test that claude user exists
+user:
+  claude:
+    exists: true
+    uid: 9999
+    gid: 9999
+    home: /home/claude
+
+# Test that claude home directory exists with correct permissions
+file:
+  /home/claude:
+    exists: true
+    filetype: directory
+    owner: claude
+    group: claude
+
+# Test that .claude directory exists
+  /home/claude/.claude:
+    exists: true
+    filetype: directory
+    owner: claude
+
+# Test that working directory exists
+  /project:
+    exists: true
+    filetype: directory
+
+# Test Node.js is installed
+command:
+  node --version:
+    exit-status: 0
+    stdout:
+      - "/v18/"
+    timeout: 5000
+
+# Test npm is installed
+  npm --version:
+    exit-status: 0
+    timeout: 5000
+
+# Environment variables
+env:
+  HOME:
+    - /home/claude
+  CLAUDE_CONFIG_DIR:
+    - /home/claude/.claude
+
+# Verify ca-certificates are installed (needed for npm registry)
+package:
+  ca-certificates:
+    installed: true
+
+# Test that apt cache is clean (image optimization)
+file:
+  /var/lib/apt/lists:
+    exists: false
+    contains: []

@@ -1,0 +1,84 @@
+# Container Structure Tests for Claude Code Docker Wrapper
+# Tests run post-build to validate image structure and contents
+# Run with: container-structure-test test --image claudedocker:local --config tests/structure.yaml
+
+schemaVersion: 2.0.0
+
+# Test that Claude Code CLI binary is installed and accessible
+commandTests:
+  - name: "Claude Code binary exists"
+    command: "which"
+    args: ["claude"]
+    expectedOutput: ["/usr/local/bin/claude"]
+
+  - name: "Claude Code is executable"
+    command: "claude"
+    args: ["--version"]
+    exitCode: 0
+
+  - name: "Node.js is installed"
+    command: "node"
+    args: ["--version"]
+    expectedOutput: ["v18.*"]
+
+  - name: "npm is installed"
+    command: "npm"
+    args: ["--version"]
+    exitCode: 0
+
+  - name: "fixuid binary exists"
+    command: "which"
+    args: ["fixuid"]
+    expectedOutput: ["/usr/local/bin/fixuid"]
+
+# Test file existence and permissions
+fileExistenceTests:
+  - name: "fixuid binary has correct permissions"
+    path: "/usr/local/bin/fixuid"
+    permissions: "-rwsr-xr-x"  # setuid bit must be set
+    uid: 0  # owned by root
+    gid: 0
+
+  - name: "Claude user home directory exists"
+    path: "/home/claude"
+    isDirectory: true
+    permissions: "drwxr-xr-x"
+
+  - name: "Claude config directory exists"
+    path: "/home/claude/.claude"
+    isDirectory: true
+
+  - name: "fixuid config file exists"
+    path: "/etc/fixuid/config.yml"
+    permissions: "-rw-r--r--"
+
+# Test file contents
+fileContentTests:
+  - name: "fixuid config contains correct user"
+    path: "/etc/fixuid/config.yml"
+    expectedContents: ["user: claude"]
+
+  - name: "fixuid config contains correct group"
+    path: "/etc/fixuid/config.yml"
+    expectedContents: ["group: claude"]
+
+# Test image metadata
+metadataTest:
+  envVars:
+    - key: "NODE_VERSION"
+      value: "18.*"
+
+  labels:
+    - key: "org.opencontainers.image.title"
+      value: "Claude Code Docker Wrapper"
+
+    - key: "com.claudedocker.node-version"
+      value: "18"
+
+  workdir: "/project"
+
+  entrypoint: ["fixuid", "-q"]
+
+  cmd: ["claude", "--dangerously-skip-permissions"]
+
+  user: "claude"  # After fixuid runs, should be claude user

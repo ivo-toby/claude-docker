@@ -1,0 +1,30 @@
+{
+  "name": "claudedocker",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "bats tests/test_wrapper.bats"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ivo-toby/claude-docker.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/ivo-toby/claude-docker/issues"
+  },
+  "homepage": "https://github.com/ivo-toby/claude-docker#readme",
+  "devDependencies": {
+    "bats": "^1.13.0",
+    "bats-assert": "^2.2.4",
+    "bats-mock": "^1.2.5",
+    "bats-support": "^0.3.0"
+  }
+}

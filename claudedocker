@@ -1,0 +1,308 @@
+#!/usr/bin/env bash
+# claudedocker - Docker wrapper for Claude Code CLI
+# Launches Claude Code in an isolated Docker container with full autonomy
+# while protecting the host system from unintended changes.
+
+set -euo pipefail
+
+# Version information
+VERSION="1.0.0"
+DEFAULT_IMAGE="ghcr.io/username/claudedocker:latest"
+LOCAL_IMAGE="claudedocker:local"
+
+# Color codes for output
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+GREEN='\033[0;32m'
+NC='\033[0m' # No Color
+
+# Logging functions
+log_info() {
+    echo -e "[claudedocker] INFO: $*" >&2
+}
+
+log_warn() {
+    echo -e "${YELLOW}[claudedocker] WARN: $*${NC}" >&2
+}
+
+log_error() {
+    echo -e "${RED}[claudedocker] ERROR: $*${NC}" >&2
+}
+
+log_debug() {
+    if [ "${CLAUDEDOCKER_DEBUG:-0}" = "1" ]; then
+        echo -e "[claudedocker] DEBUG: $*" >&2
+    fi
+}
+
+# Display help message
+show_help() {
+    cat << EOF
+Usage: claudedocker [OPTIONS] [-- CLAUDE_ARGS...]
+
+Run Claude Code in an isolated Docker container.
+
+Options:
+  --image IMAGE          Docker image to use (default: $DEFAULT_IMAGE)
+  --volume NAME          Docker volume name for Claude home directory (default: claudedocker-config)
+  --copy-host-config     Copy host ~/.claude config to volume on first run
+  --work-dir PATH        Override working directory in container (default: /project)
+  --docker-args ARGS     Additional arguments to pass to docker run
+  --local                Use locally built image (claudedocker:local)
+  --local-only           Use local image only, fail if not found (no registry pull)
+  --version              Show version and exit
+  --help                 Show this help message
+
+Environment Variables:
+  CLAUDEDOCKER_IMAGE    Override default image
+  CLAUDEDOCKER_VOLUME   Override default volume name
+  ANTHROPIC_API_KEY     Claude API key (if using API key auth instead of subscription)
+
+Examples:
+  claudedocker                           # Basic usage
+  claudedocker --image claudedocker:v1   # Use specific version
+  claudedocker -- --help                 # Pass --help to Claude
+  claudedocker --docker-args "-p 8080:8080"  # Expose port 8080
+
+For more information: https://github.com/username/claudedocker
+EOF
+}
+
+# Display version information
+show_version() {
+    echo "claudedocker version $VERSION"
+    echo "Docker image: ${CLAUDEDOCKER_IMAGE:-$DEFAULT_IMAGE}"
+}
+
+# Pre-flight check: Docker daemon is running
+check_docker_running() {
+    if ! docker ps >/dev/null 2>&1; then
+        log_error "Cannot connect to Docker daemon"
+        echo "  → Is Docker running? Try: docker ps" >&2
+        echo "  → macOS: Open Docker Desktop" >&2
+        echo "  → Linux: sudo systemctl start docker" >&2
+        return 1
+    fi
+    log_debug "Docker daemon is running"
+    return 0
+}
+
+# Pre-flight check: Current directory is readable
+check_current_dir_readable() {
+    if [ ! -r "$(pwd)" ]; then
+        log_error "Cannot read current directory: $(pwd)"
+        echo "  → Permission denied" >&2
+        echo "  → Run claudedocker from a directory you own" >&2
+        return 3
+    fi
+    log_debug "Current directory is readable: $(pwd)"
+    return 0
+}
+
+# Pre-flight check: Docker image exists locally (for --local-only mode)
+check_image_exists() {
+    local img="$1"
+    if ! docker image inspect "$img" >/dev/null 2>&1; then
+        log_error "Docker image not found locally: $img"
+        echo "  → Build the image first with: ./scripts/build.sh" >&2
+        echo "  → Or remove --local-only flag to allow registry pull" >&2
+        return 4
+    fi
+    log_debug "Image found locally: $img"
+    return 0
+}
+
+# Copy host .claude config to Docker volume
+copy_host_config_to_volume() {
+    local volume_name="$1"
+
+    if [ ! -d "$HOME/.claude" ]; then
+        log_warn "No ~/.claude directory found on host, skipping config copy"
+        return 0
+    fi
+
+    log_info "Copying host ~/.claude config to Docker volume '$volume_name'..."
+
+    # Use a temporary container to copy files and fix ownership
+    # We copy as root, then chown to match the target UID:GID
+    # Now copying to /dest/.claude since volume mounts to /home/claude
+    docker run --rm \
+        -v "$HOME/.claude:/source:ro" \
+        -v "$volume_name:/dest" \
+        -e "TARGET_UID=$(id -u)" \
+        -e "TARGET_GID=$(id -g)" \
+        alpine:latest \
+        sh -c "mkdir -p /dest/.claude && cp -a /source/. /dest/.claude/ && chown -R \$TARGET_UID:\$TARGET_GID /dest && echo 'Copy complete'"
+
+    if [ $? -eq 0 ]; then
+        log_info "Successfully copied host config to volume"
+    else
+        log_error "Failed to copy host config to volume"
+        return 1
+    fi
+    return 0
+}
+
+# Validate prohibited flags in --docker-args
+validate_docker_args() {
+    local args="$1"
+
+    # Check for prohibited patterns
+    if echo "$args" | grep -qE -- '--privileged|--cap-add[[:space:]]*ALL|--pid[[:space:]]*host'; then
+        log_warn "Potentially unsafe Docker flags detected in --docker-args"
+        log_warn "Flags like --privileged, --cap-add=ALL, --pid=host can break isolation"
+        log_warn "Proceeding anyway, but use with caution"
+    fi
+}
+
+# Main execution function
+main() {
+    # Parse arguments
+    local use_local=false
+    local local_only=false
+    local copy_host_config=false
+    local claude_volume="${CLAUDEDOCKER_VOLUME:-claudedocker-config}"
+    local image="${CLAUDEDOCKER_IMAGE:-$DEFAULT_IMAGE}"
+    local work_dir="${CLAUDEDOCKER_WORK_DIR:-/project}"
+    local docker_args=""
+    local claude_args=""
+    local parsing_claude_args=false
+
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --help)
+                show_help
+                exit 0
+                ;;
+            --version)
+                show_version
+                exit 0
+                ;;
+            --local)
+                use_local=true
+                shift
+                ;;
+            --local-only)
+                use_local=true
+                local_only=true
+                shift
+                ;;
+            --copy-host-config)
+                copy_host_config=true
+                shift
+                ;;
+            --volume)
+                claude_volume="$2"
+                shift 2
+                ;;
+            --image)
+                image="$2"
+                shift 2
+                ;;
+            --work-dir)
+                work_dir="$2"
+                shift 2
+                ;;
+            --docker-args)
+                docker_args="$2"
+                validate_docker_args "$docker_args"
+                shift 2
+                ;;
+            --)
+                parsing_claude_args=true
+                shift
+                ;;
+            *)
+                if [ "$parsing_claude_args" = true ]; then
+                    claude_args+=("$1")
+                else
+                    log_error "Unknown option: $1"
+                    echo "Run 'claudedocker --help' for usage information" >&2
+                    exit 1
+                fi
+                shift
+                ;;
+        esac
+    done
+
+    # Use local image if requested
+    if [ "$use_local" = true ]; then
+        image="$LOCAL_IMAGE"
+        log_debug "Using local image: $image"
+    fi
+
+    # Run pre-flight checks
+    log_info "Running pre-flight checks..."
+    check_docker_running || exit $?
+    check_current_dir_readable || exit $?
+
+    # Check if image exists when using --local-only
+    if [ "$local_only" = true ]; then
+        check_image_exists "$image" || exit $?
+    fi
+
+    # Copy host config to volume if requested
+    if [ "$copy_host_config" = true ]; then
+        # Check if volume already has content
+        if docker volume inspect "$claude_volume" >/dev/null 2>&1; then
+            log_warn "Volume '$claude_volume' already exists!"
+            log_warn "Copying host config will OVERWRITE any existing authentication."
+            echo -n "Continue? [y/N] " >&2
+            read -r response
+            if [[ ! "$response" =~ ^[Yy]$ ]]; then
+                log_info "Aborting. Use './claudedocker --local' to use existing volume."
+                exit 0
+            fi
+        fi
+        copy_host_config_to_volume "$claude_volume" || exit $?
+    fi
+
+    # Construct docker run command
+    log_info "Launching Claude Code in Docker container..."
+    log_info "Mounting: $(pwd) -> /project"
+    log_info "Using config volume: $claude_volume"
+    log_info "Using image: $image"
+
+    local docker_cmd=(
+        docker run
+        --rm
+        -it
+        -e "FIXUID=$(id -u)"
+        -e "FIXGID=$(id -g)"
+        -e "HOME=/home/claude"
+        -e "CLAUDE_CONFIG_DIR=/home/claude/.claude"
+        -v "$(pwd):/project"
+        -v "$claude_volume:/home/claude"
+        -w "$work_dir"
+    )
+
+    log_debug "Using Docker volume '$claude_volume' for Claude config"
+
+    # Pass through ANTHROPIC_API_KEY if set
+    if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+        docker_cmd+=(-e "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY")
+        log_debug "Passing ANTHROPIC_API_KEY to container"
+    fi
+
+    # Add custom docker args if provided
+    if [ -n "$docker_args" ]; then
+        # shellcheck disable=SC2086
+        docker_cmd+=($docker_args)
+        log_debug "Added custom docker args: $docker_args"
+    fi
+
+    # Add image
+    docker_cmd+=("$image")
+
+    # Add Claude args if provided
+    if [ ${#claude_args[@]} -gt 0 ]; then
+        docker_cmd+=(claude --dangerously-skip-permissions "${claude_args[@]}")
+    fi
+
+    # Execute docker run
+    log_debug "Executing: ${docker_cmd[*]}"
+    exec "${docker_cmd[@]}"
+}
+
+# Run main function
+main "$@"
