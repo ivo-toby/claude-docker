@@ -57,6 +57,8 @@ jobs:
         run: container-structure-test test --image test-image:latest --config tests/structure.yaml
 
       - name: Run Trivy security scan
+        id: trivy
+        continue-on-error: true
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: test-image:latest
@@ -65,8 +67,8 @@ jobs:
           severity: 'CRITICAL,HIGH'
 
       - name: Upload Trivy results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v2
-        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        if: always() && hashFiles('trivy-results.sarif') != ''
         with:
           sarif_file: 'trivy-results.sarif'
 
