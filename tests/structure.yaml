@@ -41,12 +41,12 @@ fileExistenceTests:
 
   - name: "Claude user home directory exists"
     path: "/home/claude"
-    isDirectory: true
+    isDir: true
     permissions: "drwxr-xr-x"
 
   - name: "Claude config directory exists"
     path: "/home/claude/.claude"
-    isDirectory: true
+    isDir: true
 
   - name: "fixuid config file exists"
     path: "/etc/fixuid/config.yml"
