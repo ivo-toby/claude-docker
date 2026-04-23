@@ -11,6 +11,7 @@ Run [Claude Code CLI](https://github.com/anthropics/claude-code) in an isolated 
 - **Fast Startup**: Optimized Docker image with layer caching (<5 second startup)
 - **Local Development**: Build and test images locally without CI/CD
 - **UID/GID Remapping**: Automatically matches container user to your host user for correct file permissions
+- **Ollama Backend**: Use local or cloud models via [Ollama](https://ollama.com) instead of the Anthropic API
 
 ## Quick Start
 
@@ -23,8 +24,8 @@ Run [Claude Code CLI](https://github.com/anthropics/claude-code) in an isolated 
 
 ```bash
 # Clone the repository
-git clone https://github.com/username/claudedocker.git
-cd claudedocker
+git clone https://github.com/ivo-toby/claude-docker.git
+cd claude-docker
 
 # Install the wrapper script
 ./scripts/install.sh
@@ -81,6 +82,56 @@ export ANTHROPIC_API_KEY="your-api-key"
 claudedocker
 ```
 
+## Ollama Backend
+
+claudedocker can use [Ollama](https://ollama.com) as a drop-in replacement for the Anthropic API, letting you run Claude Code with local or cloud-hosted open models — no Anthropic subscription required.
+
+### Prerequisites
+
+- Ollama installed and running on your host machine
+- A model with a large context window (64k+ tokens recommended)
+
+### Quick Start
+
+```bash
+# Start Ollama with a cloud model (no local GPU needed)
+ollama run kimi-k2.6:cloud
+
+# Launch claudedocker pointing at your local Ollama server
+claudedocker --ollama --model kimi-k2.6:cloud
+```
+
+On **macOS/Windows** (Docker Desktop), the wrapper automatically connects to `host.docker.internal:11434`. On **Linux**, it maps the same hostname to the host gateway, so the same command works everywhere.
+
+### Recommended Models
+
+| Model | Type | Notes |
+|-------|------|-------|
+| `kimi-k2.6:cloud` | Cloud | Strong coding performance |
+| `glm-5:cloud` | Cloud | |
+| `minimax-m2.7:cloud` | Cloud | |
+| `qwen3.5:cloud` | Cloud | |
+| `qwen3.5` | Local | Requires capable GPU |
+| `glm-4.7-flash` | Local | Lighter weight |
+
+### Ollama Examples
+
+```bash
+# Cloud model via Ollama (no local GPU)
+claudedocker --ollama --model kimi-k2.6:cloud
+
+# Local model
+claudedocker --ollama --model qwen3.5
+
+# Remote Ollama server
+claudedocker --ollama-url http://192.168.1.10:11434 --model qwen3.5
+
+# Manual env var configuration (equivalent to --ollama)
+export ANTHROPIC_AUTH_TOKEN=ollama
+export ANTHROPIC_BASE_URL=http://localhost:11434
+claudedocker --model qwen3.5
+```
+
 ## Usage
 
 ### Command Line Options
@@ -89,13 +140,16 @@ claudedocker
 Usage: claudedocker [OPTIONS] [-- CLAUDE_ARGS...]
 
 Options:
-  --image IMAGE          Docker image to use (default: ghcr.io/ivo-toby/claudedocker:latest)
+  --image IMAGE          Docker image to use (default: ghcr.io/ivo-toby/claude-docker:latest)
   --volume NAME          Docker volume name for Claude home directory (default: claudedocker-config)
   --copy-host-config     Copy host ~/.claude config to volume on first run
   --work-dir PATH        Override working directory in container (default: /project)
   --docker-args ARGS     Additional arguments to pass to docker run
   --local                Use locally built image (claudedocker:local)
   --local-only           Use local image only, fail if not found (no registry pull)
+  --ollama               Enable Ollama backend (auto-detects Docker host URL)
+  --ollama-url URL       Set custom Ollama server URL (implies --ollama)
+  --model MODEL          Model to use (e.g. qwen3.5, kimi-k2.6:cloud)
   --version              Show version and exit
   --help                 Show this help message
 
@@ -103,6 +157,8 @@ Environment Variables:
   CLAUDEDOCKER_IMAGE     Override default image
   CLAUDEDOCKER_VOLUME    Override default volume name
   ANTHROPIC_API_KEY      Claude API key (if using API key auth)
+  ANTHROPIC_AUTH_TOKEN   Auth token passed to container (set to 'ollama' for Ollama)
+  ANTHROPIC_BASE_URL     Base URL passed to container (e.g. http://localhost:11434)
 ```
 
 ### Examples
@@ -112,7 +168,7 @@ Environment Variables:
 claudedocker
 
 # Use specific Docker image version
-claudedocker --image ghcr.io/ivo-toby/claudedocker:v1.0.0
+claudedocker --image ghcr.io/ivo-toby/claude-docker:v1.0.0
 
 # Use locally built image
 claudedocker --local
@@ -188,7 +244,7 @@ npm test
 
 ```
 claudedocker:latest
-├── Node.js 18 (slim base image)
+├── Node.js 22 (slim base image)
 ├── Claude Code CLI (from npm)
 ├── su-exec (for UID/GID remapping)
 ├── Custom entrypoint.sh
@@ -224,7 +280,7 @@ git push origin v1.0.0
 # GitHub Actions will automatically:
 # - Run tests
 # - Build multi-platform images
-# - Push to ghcr.io/username/claudedocker:v1.0.0
+# - Push to ghcr.io/ivo-toby/claude-docker:v1.0.0
 # - Update :latest tag
 ```
 
