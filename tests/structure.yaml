@@ -16,28 +16,32 @@ commandTests:
     args: ["--version"]
     exitCode: 0
 
-  - name: "Node.js is installed"
+  - name: "Node.js v22 is installed"
     command: "node"
     args: ["--version"]
-    expectedOutput: ["v22.*"]
+    expectedOutput: ["v22\\."]
 
   - name: "npm is installed"
     command: "npm"
     args: ["--version"]
     exitCode: 0
 
-  - name: "fixuid binary exists"
+  - name: "su-exec binary exists"
     command: "which"
-    args: ["fixuid"]
-    expectedOutput: ["/usr/local/bin/fixuid"]
+    args: ["su-exec"]
+    expectedOutput: ["/usr/local/bin/su-exec"]
 
 # Test file existence and permissions
 fileExistenceTests:
-  - name: "fixuid binary has correct permissions"
-    path: "/usr/local/bin/fixuid"
-    permissions: "-rwsr-xr-x"  # setuid bit must be set
-    uid: 0  # owned by root
+  - name: "su-exec binary has correct permissions"
+    path: "/usr/local/bin/su-exec"
+    permissions: "-rwxr-xr-x"
+    uid: 0
     gid: 0
+
+  - name: "entrypoint script exists"
+    path: "/usr/local/bin/entrypoint.sh"
+    permissions: "-rwxr-xr-x"
 
   - name: "Claude user home directory exists"
     path: "/home/claude"
@@ -47,26 +51,8 @@ fileExistenceTests:
     path: "/home/claude/.claude"
     shouldExist: true
 
-  - name: "fixuid config file exists"
-    path: "/etc/fixuid/config.yml"
-    permissions: "-rw-r--r--"
-
-# Test file contents
-fileContentTests:
-  - name: "fixuid config contains correct user"
-    path: "/etc/fixuid/config.yml"
-    expectedContents: ["user: claude"]
-
-  - name: "fixuid config contains correct group"
-    path: "/etc/fixuid/config.yml"
-    expectedContents: ["group: claude"]
-
 # Test image metadata
 metadataTest:
-  envVars:
-    - key: "NODE_VERSION"
-      value: "22.*"
-
   labels:
     - key: "org.opencontainers.image.title"
       value: "Claude Code Docker Wrapper"
@@ -74,10 +60,15 @@ metadataTest:
     - key: "com.claudedocker.node-version"
       value: "22"
 
+  envVars:
+    - key: "HOME"
+      value: "/home/claude"
+
+    - key: "CLAUDE_CONFIG_DIR"
+      value: "/home/claude/.claude"
+
   workdir: "/project"
 
-  entrypoint: ["fixuid", "-q"]
+  entrypoint: ["/usr/local/bin/entrypoint.sh"]
 
   cmd: ["claude", "--dangerously-skip-permissions"]
-
-  user: "claude"  # After fixuid runs, should be claude user
