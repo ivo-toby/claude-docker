@@ -20,6 +20,7 @@ LABEL org.opencontainers.image.title="Claude Code Docker Wrapper" \
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Install system dependencies tailored for a coding agent experience
+# hadolint ignore=DL3008
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         ca-certificates \
