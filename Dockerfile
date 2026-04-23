@@ -16,24 +16,25 @@ LABEL org.opencontainers.image.title="Claude Code Docker Wrapper" \
       com.claudedocker.node-version="22" \
       com.claudedocker.base-image="node:22-slim"
 
+# Enable pipefail so pipes in RUN steps fail fast
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 # Install su-exec for runtime user switching (lightweight alternative to gosu)
+# hadolint ignore=DL3008
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl ca-certificates && \
-    curl -fsSL https://github.com/ncopa/su-exec/archive/refs/tags/v0.2.tar.gz | \
+    apt-get install -y --no-install-recommends curl ca-certificates gcc libc-dev make && \
+    curl -fsSL "https://github.com/ncopa/su-exec/archive/refs/tags/v${SU_EXEC_VERSION}.tar.gz" | \
     tar -xz && \
-    cd su-exec-0.2 && \
-    apt-get install -y --no-install-recommends gcc libc-dev make && \
-    make && \
-    mv su-exec /usr/local/bin/ && \
-    cd .. && \
-    rm -rf su-exec-0.2 && \
+    make -C "su-exec-${SU_EXEC_VERSION}" && \
+    mv "su-exec-${SU_EXEC_VERSION}/su-exec" /usr/local/bin/ && \
+    rm -rf "su-exec-${SU_EXEC_VERSION}" && \
     apt-get purge -y gcc libc-dev make && \
     apt-get autoremove -y && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Claude Code CLI from npm
-RUN npm install -g @anthropic-ai/claude-code
+# Install Claude Code CLI from npm (version controlled via build arg)
+RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
 
 # Copy custom entrypoint script (do this before user creation for better caching)
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
