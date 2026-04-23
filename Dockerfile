@@ -50,6 +50,14 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
+# Install GitHub CLI (gh)
+ARG GH_VERSION=2.69.0
+RUN curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_$(dpkg --print-architecture).tar.gz" | \
+    tar -xz -C /tmp && \
+    mv "/tmp/gh_${GH_VERSION}_linux_$(dpkg --print-architecture)/bin/gh" /usr/local/bin/ && \
+    rm -rf "/tmp/gh_${GH_VERSION}_linux_$(dpkg --print-architecture)" && \
+    gh --version
+
 # Install Claude Code CLI from npm (version controlled via build arg)
 RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
 

@@ -82,6 +82,39 @@ export ANTHROPIC_API_KEY="your-api-key"
 claudedocker
 ```
 
+## Forwarding Host Tool Authentication
+
+When running inside the container, CLI tools like `git`, `gh`, `npm`, `aws`, and `gcloud` have no access to your host credentials. Use the `--forward-*` flags to mount host configs read-only into the container:
+
+```bash
+# Git via SSH (forwards your ssh-agent socket)
+claudedocker --forward-ssh
+
+# GitHub CLI (mounts ~/.config/gh)
+claudedocker --forward-gh
+
+# npm private registry (mounts ~/.npmrc)
+claudedocker --forward-npm
+
+# AWS CLI (mounts ~/.aws)
+claudedocker --forward-aws
+
+# Google Cloud (mounts ~/.config/gcloud)
+claudedocker --forward-gcp
+
+# Combine multiple
+claudedocker --forward-ssh --forward-gh --forward-aws
+```
+
+**How it works:**
+- `--forward-ssh` mounts `SSH_AUTH_SOCK` into the container so `git` can use your existing SSH keys without copying them
+- `--forward-gh` mounts `~/.config/gh` and sets `GH_CONFIG_DIR` so `gh auth status` works immediately
+- `--forward-npm` mounts `~/.npmrc` for private registry access
+- `--forward-aws` mounts `~/.aws` for AWS CLI credentials
+- `--forward-gcp` mounts `~/.config/gcloud` and sets `CLOUDSDK_CONFIG`
+
+All mounts are read-only (`:ro`) so the container cannot modify your host credentials.
+
 ## Ollama Backend
 
 claudedocker can use [Ollama](https://ollama.com) as a drop-in replacement for the Anthropic API, letting you run Claude Code with local or cloud-hosted open models — no Anthropic subscription required.
@@ -150,6 +183,11 @@ Options:
   --ollama               Enable Ollama backend (auto-detects Docker host URL)
   --ollama-url URL       Set custom Ollama server URL (implies --ollama)
   --model MODEL          Model to use (e.g. qwen3.5, kimi-k2.6:cloud)
+  --forward-ssh          Forward SSH agent socket for git authentication
+  --forward-gh           Forward GitHub CLI authentication from host
+  --forward-npm          Forward npm authentication (.npmrc) from host
+  --forward-aws          Forward AWS credentials from host
+  --forward-gcp          Forward GCP (gcloud) credentials from host
   --version              Show version and exit
   --help                 Show this help message
 

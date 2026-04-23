@@ -54,6 +54,11 @@ Options:
                          auto-detects Docker host URL: http://host.docker.internal:11434)
   --ollama-url URL       Set custom Ollama server URL (implies --ollama)
   --model MODEL          Specify the model for Claude to use (e.g. qwen3.5, kimi-k2.5:cloud)
+  --forward-ssh          Forward SSH agent socket for git authentication
+  --forward-gh           Forward GitHub CLI authentication from host
+  --forward-npm          Forward npm authentication (.npmrc) from host
+  --forward-aws          Forward AWS credentials from host
+  --forward-gcp          Forward GCP (gcloud) credentials from host
   --version              Show version and exit
   --help                 Show this help message
 
@@ -63,6 +68,7 @@ Environment Variables:
   ANTHROPIC_API_KEY       Claude API key (if using API key auth instead of subscription)
   ANTHROPIC_AUTH_TOKEN    Auth token passed to container (set to 'ollama' for Ollama backend)
   ANTHROPIC_BASE_URL      Base URL passed to container (e.g. http://localhost:11434)
+  SSH_AUTH_SOCK           SSH agent socket (forwarded with --forward-ssh)
 
 Ollama Backend Examples:
   claudedocker --ollama                              # Use Ollama with default local server
@@ -128,6 +134,68 @@ check_image_exists() {
     return 0
 }
 
+# Forward SSH agent socket for git operations
+forward_ssh_auth() {
+    if [ -z "${SSH_AUTH_SOCK:-}" ]; then
+        log_warn "SSH_AUTH_SOCK not set. Start ssh-agent or use 'ssh-add -l' to verify."
+        return 1
+    fi
+    if [ ! -S "$SSH_AUTH_SOCK" ]; then
+        log_warn "SSH_AUTH_SOCK does not point to a valid socket: $SSH_AUTH_SOCK"
+        return 1
+    fi
+    docker_cmd+=(-e "SSH_AUTH_SOCK=/ssh-agent")
+    docker_cmd+=(-v "$SSH_AUTH_SOCK:/ssh-agent")
+    log_info "Forwarding SSH agent for git authentication"
+    return 0
+}
+
+# Forward GitHub CLI auth config
+forward_gh_auth() {
+    if [ ! -d "$HOME/.config/gh" ]; then
+        log_warn "No ~/.config/gh found. Run 'gh auth login' on the host first."
+        return 1
+    fi
+    docker_cmd+=(-v "$HOME/.config/gh:/home/claude/.config/gh:ro")
+    docker_cmd+=(-e "GH_CONFIG_DIR=/home/claude/.config/gh")
+    log_info "Forwarding GitHub CLI authentication"
+    return 0
+}
+
+# Forward npm auth (.npmrc)
+forward_npm_auth() {
+    if [ ! -f "$HOME/.npmrc" ]; then
+        log_warn "No ~/.npmrc found. Skipping npm auth forwarding."
+        return 1
+    fi
+    docker_cmd+=(-v "$HOME/.npmrc:/home/claude/.npmrc:ro")
+    log_info "Forwarding npm authentication"
+    return 0
+}
+
+# Forward AWS credentials
+forward_aws_auth() {
+    if [ ! -d "$HOME/.aws" ]; then
+        log_warn "No ~/.aws found. Run 'aws configure' on the host first."
+        return 1
+    fi
+    docker_cmd+=(-v "$HOME/.aws:/home/claude/.aws:ro")
+    log_info "Forwarding AWS credentials"
+    return 0
+}
+
+# Forward GCP credentials
+forward_gcp_auth() {
+    if [ ! -d "$HOME/.config/gcloud" ]; then
+        log_warn "No ~/.config/gcloud found. Run 'gcloud auth login' on the host first."
+        return 1
+    fi
+    docker_cmd+=(-v "$HOME/.config/gcloud:/home/claude/.config/gcloud:ro")
+    docker_cmd+=(-e "CLOUDSDK_CONFIG=/home/claude/.config/gcloud")
+    log_info "Forwarding GCP authentication"
+    return 0
+}
+
 # Copy host .claude config to Docker volume
 copy_host_config_to_volume() {
     local volume_name="$1"
@@ -186,6 +254,11 @@ main() {
     local ollama_mode=false
     local ollama_url=""
     local model_arg=""
+    local forward_ssh=false
+    local forward_gh=false
+    local forward_npm=false
+    local forward_aws=false
+    local forward_gcp=false
 
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -239,6 +312,26 @@ main() {
             --model)
                 model_arg="$2"
                 shift 2
+                ;;
+            --forward-ssh)
+                forward_ssh=true
+                shift
+                ;;
+            --forward-gh)
+                forward_gh=true
+                shift
+                ;;
+            --forward-npm)
+                forward_npm=true
+                shift
+                ;;
+            --forward-aws)
+                forward_aws=true
+                shift
+                ;;
+            --forward-gcp)
+                forward_gcp=true
+                shift
                 ;;
             --)
                 parsing_claude_args=true
@@ -343,6 +436,23 @@ main() {
             docker_cmd+=(-e "ANTHROPIC_BASE_URL=$ANTHROPIC_BASE_URL")
             log_debug "Passing ANTHROPIC_BASE_URL to container"
         fi
+    fi
+
+    # Forward auth for requested CLI tools
+    if [ "$forward_ssh" = true ]; then
+        forward_ssh_auth || true
+    fi
+    if [ "$forward_gh" = true ]; then
+        forward_gh_auth || true
+    fi
+    if [ "$forward_npm" = true ]; then
+        forward_npm_auth || true
+    fi
+    if [ "$forward_aws" = true ]; then
+        forward_aws_auth || true
+    fi
+    if [ "$forward_gcp" = true ]; then
+        forward_gcp_auth || true
     fi
 
     # Add custom docker args if provided
