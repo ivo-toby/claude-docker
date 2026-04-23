@@ -50,15 +50,31 @@ Options:
   --docker-args ARGS     Additional arguments to pass to docker run
   --local                Use locally built image (claudedocker:local)
   --local-only           Use local image only, fail if not found (no registry pull)
+  --ollama               Enable Ollama backend (sets ANTHROPIC_AUTH_TOKEN=ollama,
+                         auto-detects Docker host URL: http://host.docker.internal:11434)
+  --ollama-url URL       Set custom Ollama server URL (implies --ollama)
+  --model MODEL          Specify the model for Claude to use (e.g. qwen3.5, kimi-k2.5:cloud)
   --version              Show version and exit
   --help                 Show this help message
 
 Environment Variables:
-  CLAUDEDOCKER_IMAGE    Override default image
-  CLAUDEDOCKER_VOLUME   Override default volume name
-  ANTHROPIC_API_KEY     Claude API key (if using API key auth instead of subscription)
+  CLAUDEDOCKER_IMAGE      Override default image
+  CLAUDEDOCKER_VOLUME     Override default volume name
+  ANTHROPIC_API_KEY       Claude API key (if using API key auth instead of subscription)
+  ANTHROPIC_AUTH_TOKEN    Auth token passed to container (set to 'ollama' for Ollama backend)
+  ANTHROPIC_BASE_URL      Base URL passed to container (e.g. http://localhost:11434)
 
-Examples:
+Ollama Backend Examples:
+  claudedocker --ollama                              # Use Ollama with default local server
+  claudedocker --ollama --model qwen3.5              # Use specific local model
+  claudedocker --ollama --model kimi-k2.5:cloud      # Use Ollama cloud model
+  claudedocker --ollama-url http://192.168.1.10:11434  # Use remote Ollama server
+
+  Recommended Ollama models (require large context window, 64k+ tokens):
+    kimi-k2.5:cloud, glm-5:cloud, minimax-m2.7:cloud, qwen3.5:cloud (cloud)
+    qwen3.5, glm-4.7-flash (local)
+
+Standard Examples:
   claudedocker                           # Basic usage
   claudedocker --image claudedocker:v1   # Use specific version
   claudedocker -- --help                 # Pass --help to Claude
@@ -165,8 +181,11 @@ main() {
     local image="${CLAUDEDOCKER_IMAGE:-$DEFAULT_IMAGE}"
     local work_dir="${CLAUDEDOCKER_WORK_DIR:-/project}"
     local docker_args=""
-    local claude_args=""
+    local claude_args=()
     local parsing_claude_args=false
+    local ollama_mode=false
+    local ollama_url=""
+    local model_arg=""
 
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -206,6 +225,19 @@ main() {
             --docker-args)
                 docker_args="$2"
                 validate_docker_args "$docker_args"
+                shift 2
+                ;;
+            --ollama)
+                ollama_mode=true
+                shift
+                ;;
+            --ollama-url)
+                ollama_mode=true
+                ollama_url="$2"
+                shift 2
+                ;;
+            --model)
+                model_arg="$2"
                 shift 2
                 ;;
             --)
@@ -278,10 +310,39 @@ main() {
 
     log_debug "Using Docker volume '$claude_volume' for Claude config"
 
-    # Pass through ANTHROPIC_API_KEY if set
-    if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
-        docker_cmd+=(-e "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY")
-        log_debug "Passing ANTHROPIC_API_KEY to container"
+    # Configure Ollama backend if requested
+    if [ "$ollama_mode" = true ]; then
+        # Resolve the Ollama server URL, defaulting to the Docker host
+        local resolved_ollama_url="${ollama_url:-}"
+        if [ -z "$resolved_ollama_url" ]; then
+            # host.docker.internal resolves to the host on Docker Desktop (Mac/Windows).
+            # On Linux we add --add-host below so the same hostname works there too.
+            resolved_ollama_url="http://host.docker.internal:11434"
+        fi
+        docker_cmd+=(-e "ANTHROPIC_AUTH_TOKEN=ollama")
+        docker_cmd+=(-e "ANTHROPIC_BASE_URL=$resolved_ollama_url")
+        docker_cmd+=(-e "ANTHROPIC_API_KEY=")
+        log_info "Ollama backend: $resolved_ollama_url"
+        # On Linux, host.docker.internal is not built-in; map it to the host gateway
+        if [[ "$(uname -s)" == "Linux" ]] && [ -z "$ollama_url" ]; then
+            docker_cmd+=(--add-host=host.docker.internal:host-gateway)
+        fi
+    fi
+
+    # Pass through auth/API env vars if set (skipped in ollama mode to avoid conflicts)
+    if [ "$ollama_mode" = false ]; then
+        if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+            docker_cmd+=(-e "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY")
+            log_debug "Passing ANTHROPIC_API_KEY to container"
+        fi
+        if [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ]; then
+            docker_cmd+=(-e "ANTHROPIC_AUTH_TOKEN=$ANTHROPIC_AUTH_TOKEN")
+            log_debug "Passing ANTHROPIC_AUTH_TOKEN to container"
+        fi
+        if [ -n "${ANTHROPIC_BASE_URL:-}" ]; then
+            docker_cmd+=(-e "ANTHROPIC_BASE_URL=$ANTHROPIC_BASE_URL")
+            log_debug "Passing ANTHROPIC_BASE_URL to container"
+        fi
     fi
 
     # Add custom docker args if provided
@@ -294,10 +355,16 @@ main() {
     # Add image
     docker_cmd+=("$image")
 
-    # Add Claude args if provided
-    if [ ${#claude_args[@]} -gt 0 ]; then
-        docker_cmd+=(claude --dangerously-skip-permissions "${claude_args[@]}")
+    # Always explicitly construct the Claude command so --model and pass-through args work
+    local claude_cmd=(claude --dangerously-skip-permissions)
+    if [ -n "$model_arg" ]; then
+        claude_cmd+=(--model "$model_arg")
+        log_info "Using model: $model_arg"
     fi
+    if [ ${#claude_args[@]} -gt 0 ]; then
+        claude_cmd+=("${claude_args[@]}")
+    fi
+    docker_cmd+=("${claude_cmd[@]}")
 
     # Execute docker run
     log_debug "Executing: ${docker_cmd[*]}"
