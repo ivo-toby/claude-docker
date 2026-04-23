@@ -1,6 +1,6 @@
 # Claude Code Docker Wrapper - Optimized for fast startup and cross-platform compatibility
-# Base image: node:18-slim (best npm compatibility, reasonable size ~316MB)
-FROM node:18-slim
+# Base image: node:22-slim (current LTS, reasonable size)
+FROM node:22-slim
 
 # Build arguments for version pinning
 ARG CLAUDE_CODE_VERSION=latest
@@ -13,8 +13,8 @@ LABEL org.opencontainers.image.title="Claude Code Docker Wrapper" \
       org.opencontainers.image.vendor="Claude Docker Wrapper Project" \
       org.opencontainers.image.source="https://github.com/ivo-toby/claude-docker" \
       com.claudedocker.claude-version="${CLAUDE_CODE_VERSION}" \
-      com.claudedocker.node-version="18" \
-      com.claudedocker.base-image="node:18-slim"
+      com.claudedocker.node-version="22" \
+      com.claudedocker.base-image="node:22-slim"
 
 # Install su-exec for runtime user switching (lightweight alternative to gosu)
 RUN apt-get update && \

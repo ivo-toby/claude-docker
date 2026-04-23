@@ -55,7 +55,7 @@ command:
   node --version:
     exit-status: 0
     stdout:
-      - "/v18/"
+      - "/v22/"
     timeout: 5000
 
 # Test npm is installed

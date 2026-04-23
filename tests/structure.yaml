@@ -19,7 +19,7 @@ commandTests:
   - name: "Node.js is installed"
     command: "node"
     args: ["--version"]
-    expectedOutput: ["v18.*"]
+    expectedOutput: ["v22.*"]
 
   - name: "npm is installed"
     command: "npm"
@@ -66,14 +66,14 @@ fileContentTests:
 metadataTest:
   envVars:
     - key: "NODE_VERSION"
-      value: "18.*"
+      value: "22.*"
 
   labels:
     - key: "org.opencontainers.image.title"
       value: "Claude Code Docker Wrapper"
 
     - key: "com.claudedocker.node-version"
-      value: "18"
+      value: "22"
 
   workdir: "/project"
 
