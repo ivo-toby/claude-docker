@@ -54,6 +54,8 @@ Options:
                          auto-detects Docker host URL: http://host.docker.internal:11434)
   --ollama-url URL       Set custom Ollama server URL (implies --ollama)
   --model MODEL          Specify the model for Claude to use (e.g. qwen3.5, kimi-k2.5:cloud)
+  --resume               Resume the most recent Claude Code conversation
+  --shell                Drop to a shell instead of starting Claude Code
   --forward-ssh          Forward SSH agent socket for git authentication
   --forward-gh           Forward GitHub CLI authentication from host
   --forward-npm          Forward npm authentication (.npmrc) from host
@@ -259,6 +261,8 @@ main() {
     local forward_npm=false
     local forward_aws=false
     local forward_gcp=false
+    local resume_flag=false
+    local shell_mode=false
 
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -312,6 +316,14 @@ main() {
             --model)
                 model_arg="$2"
                 shift 2
+                ;;
+            --resume)
+                resume_flag=true
+                shift
+                ;;
+            --shell)
+                shell_mode=true
+                shift
                 ;;
             --forward-ssh)
                 forward_ssh=true
@@ -465,16 +477,25 @@ main() {
     # Add image
     docker_cmd+=("$image")
 
-    # Always explicitly construct the Claude command so --model and pass-through args work
-    local claude_cmd=(claude --dangerously-skip-permissions)
-    if [ -n "$model_arg" ]; then
-        claude_cmd+=(--model "$model_arg")
-        log_info "Using model: $model_arg"
+    # Construct the command to run inside the container
+    if [ "$shell_mode" = true ]; then
+        log_info "Dropping to shell instead of starting Claude Code"
+        docker_cmd+=(bash)
+    else
+        local claude_cmd=(claude --dangerously-skip-permissions)
+        if [ -n "$model_arg" ]; then
+            claude_cmd+=(--model "$model_arg")
+            log_info "Using model: $model_arg"
+        fi
+        if [ "$resume_flag" = true ]; then
+            claude_cmd+=(--resume)
+            log_info "Resuming previous conversation"
+        fi
+        if [ ${#claude_args[@]} -gt 0 ]; then
+            claude_cmd+=("${claude_args[@]}")
+        fi
+        docker_cmd+=("${claude_cmd[@]}")
     fi
-    if [ ${#claude_args[@]} -gt 0 ]; then
-        claude_cmd+=("${claude_args[@]}")
-    fi
-    docker_cmd+=("${claude_cmd[@]}")
 
     # Execute docker run
     log_debug "Executing: ${docker_cmd[*]}"

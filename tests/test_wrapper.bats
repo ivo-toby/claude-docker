@@ -37,6 +37,8 @@ WRAPPER_SCRIPT="./claudedocker"
   assert_output --partial "--volume"
   assert_output --partial "--copy-host-config"
   assert_output --partial "--local"
+  assert_output --partial "--resume"
+  assert_output --partial "--shell"
   assert_output --partial "--version"
 }
 
@@ -73,6 +75,16 @@ WRAPPER_SCRIPT="./claudedocker"
 
 @test "--local flag is recognized" {
   run "$WRAPPER_SCRIPT" --local --help
+  assert_success
+}
+
+@test "--resume flag is recognized" {
+  run "$WRAPPER_SCRIPT" --resume --help
+  assert_success
+}
+
+@test "--shell flag is recognized" {
+  run "$WRAPPER_SCRIPT" --shell --help
   assert_success
 }
 
