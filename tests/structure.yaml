@@ -31,6 +31,16 @@ commandTests:
     args: ["su-exec"]
     expectedOutput: ["/usr/local/bin/su-exec"]
 
+  - name: "GitHub CLI binary exists"
+    command: "which"
+    args: ["gh"]
+    expectedOutput: ["/usr/local/bin/gh"]
+
+  - name: "GitHub CLI is executable"
+    command: "gh"
+    args: ["--version"]
+    exitCode: 0
+
 # Test file existence and permissions
 fileExistenceTests:
   - name: "su-exec binary has correct permissions"
