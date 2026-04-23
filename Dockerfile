@@ -19,17 +19,33 @@ LABEL org.opencontainers.image.title="Claude Code Docker Wrapper" \
 # Enable pipefail so pipes in RUN steps fail fast
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# Install su-exec for runtime user switching (lightweight alternative to gosu)
-# hadolint ignore=DL3008
+# Install system dependencies tailored for a coding agent experience
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl ca-certificates gcc libc-dev make && \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        gcc \
+        git \
+        g++ \
+        jq \
+        less \
+        libc-dev \
+        make \
+        nano \
+        openssh-client \
+        patch \
+        procps \
+        python3 \
+        python3-pip \
+        sudo \
+        unzip \
+        wget \
+        zip && \
     curl -fsSL "https://github.com/ncopa/su-exec/archive/refs/tags/v${SU_EXEC_VERSION}.tar.gz" | \
     tar -xz && \
     make -C "su-exec-${SU_EXEC_VERSION}" && \
     mv "su-exec-${SU_EXEC_VERSION}/su-exec" /usr/local/bin/ && \
     rm -rf "su-exec-${SU_EXEC_VERSION}" && \
-    apt-get purge -y gcc libc-dev make && \
-    apt-get autoremove -y && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -46,6 +62,10 @@ RUN groupadd -g 9999 claude && \
     mkdir -p /home/claude/.claude && \
     chown -R claude:claude /home/claude && \
     chmod +x /usr/local/bin/entrypoint.sh
+
+# Allow the claude user to install additional packages without a password
+RUN echo "claude ALL=(ALL) NOPASSWD: /usr/bin/apt-get, /usr/bin/apt, /usr/bin/dpkg" >> /etc/sudoers.d/claude && \
+    chmod 0440 /etc/sudoers.d/claude
 
 # Set working directory
 WORKDIR /project
