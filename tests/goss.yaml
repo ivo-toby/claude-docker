@@ -55,7 +55,7 @@ command:
   node --version:
     exit-status: 0
     stdout:
-      - "/v18/"
+      - "/v22/"
     timeout: 5000
 
 # Test npm is installed
@@ -74,6 +74,58 @@ env:
 package:
   ca-certificates:
     installed: true
+
+# Test that git is installed (required for /plugin marketplace cloning)
+  git --version:
+    exit-status: 0
+    timeout: 5000
+
+# Test that ssh client is installed (required for git@github.com clones)
+  ssh -V:
+    exit-status: 0
+    stderr:
+      - "OpenSSH"
+    timeout: 5000
+
+# Test that Python 3 is installed
+  python3 --version:
+    exit-status: 0
+    timeout: 5000
+
+# Test that jq is installed
+  jq --version:
+    exit-status: 0
+    timeout: 5000
+
+# Test that ps (procps) is installed
+  ps --version:
+    exit-status: 0
+    timeout: 5000
+
+# Test that file is installed
+  file --version:
+    exit-status: 0
+    timeout: 5000
+
+# Test that unzip is installed
+  unzip -v:
+    exit-status: 0
+    timeout: 5000
+
+# Test that zip is installed
+  zip -v:
+    exit-status: 0
+    timeout: 5000
+
+# Test that patch is installed
+  patch --version:
+    exit-status: 0
+    timeout: 5000
+
+# Test that sudo is installed and configured for the claude user
+  sudo -V:
+    exit-status: 0
+    timeout: 5000
 
 # Test that apt cache is clean (image optimization)
 file:

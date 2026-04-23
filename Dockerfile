@@ -1,6 +1,6 @@
 # Claude Code Docker Wrapper - Optimized for fast startup and cross-platform compatibility
-# Base image: node:18-slim (best npm compatibility, reasonable size ~316MB)
-FROM node:18-slim
+# Base image: node:22-slim (current LTS, reasonable size)
+FROM node:22-slim
 
 # Build arguments for version pinning
 ARG CLAUDE_CODE_VERSION=latest
@@ -11,29 +11,46 @@ LABEL org.opencontainers.image.title="Claude Code Docker Wrapper" \
       org.opencontainers.image.description="Isolated Docker environment for Claude Code CLI with full autonomy" \
       org.opencontainers.image.version="1.0.0" \
       org.opencontainers.image.vendor="Claude Docker Wrapper Project" \
-      org.opencontainers.image.source="https://github.com/username/claudedocker" \
+      org.opencontainers.image.source="https://github.com/ivo-toby/claude-docker" \
       com.claudedocker.claude-version="${CLAUDE_CODE_VERSION}" \
-      com.claudedocker.node-version="18" \
-      com.claudedocker.base-image="node:18-slim"
+      com.claudedocker.node-version="22" \
+      com.claudedocker.base-image="node:22-slim"
 
-# Install su-exec for runtime user switching (lightweight alternative to gosu)
+# Enable pipefail so pipes in RUN steps fail fast
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+# Install system dependencies tailored for a coding agent experience
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl ca-certificates && \
-    curl -fsSL https://github.com/ncopa/su-exec/archive/refs/tags/v0.2.tar.gz | \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        gcc \
+        git \
+        g++ \
+        jq \
+        less \
+        libc-dev \
+        make \
+        nano \
+        openssh-client \
+        patch \
+        procps \
+        python3 \
+        python3-pip \
+        sudo \
+        unzip \
+        wget \
+        zip && \
+    curl -fsSL "https://github.com/ncopa/su-exec/archive/refs/tags/v${SU_EXEC_VERSION}.tar.gz" | \
     tar -xz && \
-    cd su-exec-0.2 && \
-    apt-get install -y --no-install-recommends gcc libc-dev make && \
-    make && \
-    mv su-exec /usr/local/bin/ && \
-    cd .. && \
-    rm -rf su-exec-0.2 && \
-    apt-get purge -y gcc libc-dev make && \
-    apt-get autoremove -y && \
+    make -C "su-exec-${SU_EXEC_VERSION}" && \
+    mv "su-exec-${SU_EXEC_VERSION}/su-exec" /usr/local/bin/ && \
+    rm -rf "su-exec-${SU_EXEC_VERSION}" && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Claude Code CLI from npm
-RUN npm install -g @anthropic-ai/claude-code
+# Install Claude Code CLI from npm (version controlled via build arg)
+RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
 
 # Copy custom entrypoint script (do this before user creation for better caching)
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
@@ -45,6 +62,10 @@ RUN groupadd -g 9999 claude && \
     mkdir -p /home/claude/.claude && \
     chown -R claude:claude /home/claude && \
     chmod +x /usr/local/bin/entrypoint.sh
+
+# Allow the claude user to install additional packages without a password
+RUN echo "claude ALL=(ALL) NOPASSWD: /usr/bin/apt-get, /usr/bin/apt, /usr/bin/dpkg" >> /etc/sudoers.d/claude && \
+    chmod 0440 /etc/sudoers.d/claude
 
 # Set working directory
 WORKDIR /project
