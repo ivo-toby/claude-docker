@@ -403,6 +403,14 @@ main() {
 
     log_debug "Using Docker volume '$claude_volume' for Claude config"
 
+    # If a .env file is present in the mounted project, hand its contents to
+    # docker via --env-file. Per-key entries below (ANTHROPIC_*, LANGFUSE_*,
+    # etc.) still apply on top and take precedence for explicit overrides.
+    if [ -f "$(pwd)/.env" ]; then
+        docker_cmd+=(--env-file "$(pwd)/.env")
+        log_info "Forwarding .env from $(pwd) to container"
+    fi
+
     # Configure Ollama backend if requested
     if [ "$ollama_mode" = true ]; then
         # Resolve the Ollama server URL, defaulting to the Docker host
