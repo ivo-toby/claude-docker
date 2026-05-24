@@ -36,6 +36,25 @@ try:
 except ValueError:
     MAX_CHARS = 20000
 
+def _parse_tags() -> List[str]:
+    """Tags for every Langfuse trace this hook emits.
+
+    Always includes "claude-code". Appends comma-separated values from
+    CC_LANGFUSE_TAGS (preferred) or LANGFUSE_TAGS. Lets a project group a
+    test run by setting e.g. CC_LANGFUSE_TAGS=smoke-test-1,modeler-only
+    in .env, then filter by that tag in the Langfuse UI.
+    """
+    raw = os.environ.get("CC_LANGFUSE_TAGS") or os.environ.get("LANGFUSE_TAGS") or ""
+    extra = [t.strip() for t in raw.split(",") if t.strip()]
+    # de-dup while preserving order, with "claude-code" first
+    seen = set()
+    out: List[str] = []
+    for t in ["claude-code", *extra]:
+        if t not in seen:
+            seen.add(t)
+            out.append(t)
+    return out
+
 # ----------------- Logging -----------------
 _logger: Optional[logging.Logger] = None
 
@@ -532,7 +551,7 @@ def emit_turn(langfuse: Langfuse, session_id: str, turn_num: int, turn: Turn, tr
     with propagate_attributes(
         session_id=session_id,
         trace_name=f"Claude Code - Turn {turn_num}",
-        tags=["claude-code"],
+        tags=_parse_tags(),
     ):
         trace_span = _start_backdated(
             langfuse,
