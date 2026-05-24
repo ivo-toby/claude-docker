@@ -41,3 +41,4 @@ Thumbs.db
 
 # Claude Code config (if testing locally)
 .claude/
+*.pyc

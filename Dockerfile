@@ -61,6 +61,17 @@ RUN curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_$
 # Install Claude Code CLI from npm (version controlled via build arg)
 RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
 
+# Install Langfuse Python SDK for the Claude Code -> Langfuse hook.
+# Pinned to 4.x because the hook depends on SDK 4 internals.
+# --break-system-packages bypasses PEP 668 on Debian; image is single-purpose.
+RUN pip3 install --no-cache-dir --break-system-packages "langfuse>=4.0,<5"
+
+# Stage the Langfuse hook script at a stable image path. The entrypoint
+# symlinks it into /home/claude/.claude/hooks/ so it survives the named
+# volume that overlays /home/claude at runtime.
+COPY hooks/langfuse_hook.py /etc/claudedocker/hooks/langfuse_hook.py
+RUN chmod +x /etc/claudedocker/hooks/langfuse_hook.py
+
 # Copy custom entrypoint script (do this before user creation for better caching)
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 

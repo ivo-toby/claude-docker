@@ -438,6 +438,14 @@ main() {
         fi
     fi
 
+    # Forward Langfuse hook env vars (read by /etc/claudedocker/hooks/langfuse_hook.py)
+    for var in TRACE_TO_LANGFUSE LANGFUSE_PUBLIC_KEY LANGFUSE_SECRET_KEY LANGFUSE_BASE_URL CC_LANGFUSE_DEBUG CC_LANGFUSE_MAX_CHARS; do
+        if [ -n "${!var:-}" ]; then
+            docker_cmd+=(-e "$var=${!var}")
+            log_debug "Passing $var to container"
+        fi
+    done
+
     # Forward auth for requested CLI tools
     if [ "$forward_ssh" = true ]; then
         forward_ssh_auth || true

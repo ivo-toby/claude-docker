@@ -42,6 +42,17 @@ else
     echo "[entrypoint] UID/GID already correct ($TARGET_UID:$TARGET_GID)" >&2
 fi
 
+# Symlink the image-baked Langfuse hook into the claude user's hooks dir.
+# The named volume overlays /home/claude at runtime, so we (re)create the
+# symlink on every start. Path /etc/claudedocker/hooks/langfuse_hook.py is
+# guaranteed to exist (baked into the image); the symlink lets settings.json
+# reference the stable ~/.claude/hooks/langfuse_hook.py path.
+if [ -f /etc/claudedocker/hooks/langfuse_hook.py ]; then
+    mkdir -p /home/claude/.claude/hooks
+    ln -sf /etc/claudedocker/hooks/langfuse_hook.py /home/claude/.claude/hooks/langfuse_hook.py
+    chown -h "$TARGET_UID:$TARGET_GID" /home/claude/.claude/hooks /home/claude/.claude/hooks/langfuse_hook.py 2>/dev/null || true
+fi
+
 # Switch to claude user and execute command
 # Set HOME to claude's home directory (not the host's)
 HOME=/home/claude exec su-exec claude "$@"
