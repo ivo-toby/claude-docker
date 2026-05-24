@@ -531,6 +531,19 @@ def _start_backdated(langfuse: Langfuse, *, name: str, as_type: str,
     )
 
 
+def _attribution_agent(turn: Turn) -> Optional[str]:
+    """Return the subagent name (e.g. 'cf-modeler') if this turn came from a
+    Claude Code subagent transcript. Subagent transcripts include
+    `attributionAgent` (and `attributionSkill`) on each assistant row;
+    main-agent transcripts don't. Returns None for main-agent turns.
+    """
+    for am in turn.assistant_msgs:
+        name = am.get("attributionAgent")
+        if isinstance(name, str) and name:
+            return name
+    return None
+
+
 def emit_turn(langfuse: Langfuse, session_id: str, turn_num: int, turn: Turn, transcript_path: Path) -> None:
     user_text_raw = extract_text(get_content(turn.user_msg))
     user_text, user_text_meta = truncate_text(user_text_raw)
@@ -548,14 +561,24 @@ def emit_turn(langfuse: Langfuse, session_id: str, turn_num: int, turn: Turn, tr
             candidate_end_ts.append(t)
     turn_end_ts = max(candidate_end_ts) if candidate_end_ts else None
 
+    # Subagent attribution: if this turn ran inside a Claude Code subagent
+    # (e.g. /cf-model, /cf-create), name the trace by the subagent so per-persona
+    # breakdown works natively in Langfuse dashboards.
+    agent_name = _attribution_agent(turn)
+    trace_name = (
+        f"{agent_name} · Turn {turn_num}"
+        if agent_name
+        else f"Claude Code - Turn {turn_num}"
+    )
+
     with propagate_attributes(
         session_id=session_id,
-        trace_name=f"Claude Code - Turn {turn_num}",
+        trace_name=trace_name,
         tags=_parse_tags(),
     ):
         trace_span = _start_backdated(
             langfuse,
-            name=f"Claude Code - Turn {turn_num}",
+            name=trace_name,
             as_type="span",
             start_time=user_ts,
             input={"role": "user", "content": user_text},
@@ -566,6 +589,7 @@ def emit_turn(langfuse: Langfuse, session_id: str, turn_num: int, turn: Turn, tr
                 "transcript_path": str(transcript_path),
                 "user_text": user_text_meta,
                 "assistant_message_count": len(turn.assistant_msgs),
+                "attribution_agent": agent_name,
             },
         )
         parent_otel_span = trace_span._otel_span
