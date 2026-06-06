@@ -61,6 +61,10 @@ RUN curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_$
 # Install Claude Code CLI from npm (version controlled via build arg)
 RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
 
+# Install postgram CLI (pgm) — knowledge-base CLI for persisting context across sessions.
+# PGM_API_URL / PGM_API_KEY are forwarded from the host by the claudedocker wrapper script.
+RUN npm install -g "@ivotoby/postgram-cli"
+
 # Install Langfuse Python SDK for the Claude Code -> Langfuse hook.
 # Pinned to 4.x because the hook depends on SDK 4 internals.
 # --break-system-packages bypasses PEP 668 on Debian; image is single-purpose.

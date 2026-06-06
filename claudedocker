@@ -454,6 +454,14 @@ main() {
         fi
     done
 
+    # Forward Postgram CLI env vars (consumed by the pre-installed `pgm` binary)
+    for var in PGM_API_URL PGM_API_KEY; do
+        if [ -n "${!var:-}" ]; then
+            docker_cmd+=(-e "$var=${!var}")
+            log_debug "Passing $var to container"
+        fi
+    done
+
     # Forward auth for requested CLI tools
     if [ "$forward_ssh" = true ]; then
         forward_ssh_auth || true

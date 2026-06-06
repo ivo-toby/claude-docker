@@ -10,11 +10,16 @@ command:
       - "@anthropic-ai/claude-code"
     timeout: 10000
 
-# Test that su-exec is installed
+# Test that GitHub CLI binary exists
 file:
   /usr/local/bin/su-exec:
     exists: true
     mode: "0755"
+    filetype: file
+
+# Test that postgram CLI binary is installed
+  /usr/local/bin/pgm:
+    exists: true
     filetype: file
 
 # Test that entrypoint script exists and is executable
