@@ -12,6 +12,7 @@ Run [Claude Code CLI](https://github.com/anthropics/claude-code) in an isolated 
 - **Local Development**: Build and test images locally without CI/CD
 - **UID/GID Remapping**: Automatically matches container user to your host user for correct file permissions
 - **Ollama Backend**: Use local or cloud models via [Ollama](https://ollama.com) instead of the Anthropic API
+- **Postgram Pre-installed**: The [Postgram](https://www.npmjs.com/package/@ivotoby/postgram-cli) CLI (`pgm`) ships in the image, with `PGM_API_URL` / `PGM_API_KEY` auto-forwarded from the host
 
 ## Quick Start
 
@@ -115,6 +116,27 @@ claudedocker --forward-ssh --forward-gh --forward-aws
 
 All mounts are read-only (`:ro`) so the container cannot modify your host credentials.
 
+## Postgram Knowledge Base
+
+[Postgram](https://www.npmjs.com/package/@ivotoby/postgram-cli) (`pgm`) is pre-installed in the image, giving you a CLI to persist and search knowledge across sessions. The wrapper auto-forwards the following host env vars to the container when set — you don't need to do anything:
+
+- `PGM_API_URL` — Postgram API endpoint
+- `PGM_API_KEY` — Postgram API key
+
+```bash
+# Set once on the host, then run claudedocker as usual
+export PGM_API_URL="https://postgram.example.com"
+export PGM_API_KEY="..."
+
+claudedocker
+# Inside the container:
+#   $ pgm --help
+#   $ pgm remember "useful fact about this repo"
+#   $ pgm recall "auth flow"
+```
+
+If the env vars are unset, `pgm` is still on `$PATH` — it'll just fail at first write (the skill verifies config and surfaces a clear error).
+
 ## Ollama Backend
 
 claudedocker can use [Ollama](https://ollama.com) as a drop-in replacement for the Anthropic API, letting you run Claude Code with local or cloud-hosted open models — no Anthropic subscription required.
@@ -197,6 +219,8 @@ Environment Variables:
   ANTHROPIC_API_KEY      Claude API key (if using API key auth)
   ANTHROPIC_AUTH_TOKEN   Auth token passed to container (set to 'ollama' for Ollama)
   ANTHROPIC_BASE_URL     Base URL passed to container (e.g. http://localhost:11434)
+  PGM_API_URL            Postgram API endpoint (forwarded to container)
+  PGM_API_KEY            Postgram API key (forwarded to container)
 ```
 
 ### Examples
@@ -284,6 +308,7 @@ npm test
 claudedocker:latest
 ├── Node.js 22 (slim base image)
 ├── Claude Code CLI (from npm)
+├── Postgram CLI `pgm` (from npm)
 ├── su-exec (for UID/GID remapping)
 ├── Custom entrypoint.sh
 └── Default user 'claude' (UID 9999, GID 9999)
