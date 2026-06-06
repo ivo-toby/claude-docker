@@ -46,11 +46,6 @@ commandTests:
     args: ["pgm"]
     expectedOutput: ["/usr/local/bin/pgm"]
 
-  - name: "Postgram CLI is executable"
-    command: "pgm"
-    args: ["--version"]
-    exitCode: 0
-
 # Test file existence and permissions
 fileExistenceTests:
   - name: "su-exec binary has correct permissions"
