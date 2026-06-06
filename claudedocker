@@ -454,13 +454,18 @@ main() {
         fi
     done
 
-    # Forward Postgram CLI env vars (consumed by the pre-installed `pgm` binary)
-    for var in PGM_API_URL PGM_API_KEY; do
-        if [ -n "${!var:-}" ]; then
-            docker_cmd+=(-e "$var=${!var}")
-            log_debug "Passing $var to container"
-        fi
-    done
+    # Forward all Postgram CLI env vars from the host. The `pgm` binary
+    # is pre-installed in the image and reads several PGM_* / POSTGRAM_*
+    # variables; enumerate whatever is set in the host environment so
+    # adding a new var on the host works without a wrapper update.
+    while IFS='=' read -r var value; do
+        case "$var" in
+            PGM_*|POSTGRAM_*)
+                docker_cmd+=(-e "$var=$value")
+                log_debug "Passing $var to container"
+                ;;
+        esac
+    done < <(env)
 
     # Forward auth for requested CLI tools
     if [ "$forward_ssh" = true ]; then
